@@ -1,6 +1,8 @@
-param deploymentName string = 'tsarmTesting3'
+// Deployment Name is used to prefix all resources
+param deploymentName string
 param deploymentString  string = substring(guid(uniqueString(resourceGroup().id)), 0, 2)
 
+// Parameters - If no default, then param is required.
 @description('This is the object ID for the service princpal.')
 @secure()
 param servicePrincipalObjectId string
@@ -25,17 +27,17 @@ param databricksMRGID string = '${subscription().id}/resourceGroups/${deployment
 param containerName string = 'trifacta'
 param keyVaultName string = '${deploymentName}-${deploymentString}-kv'
 
+//Variables
 var networkInterfaceName = '${deploymentName}-${deploymentString}-int'
-//var nsgId = resourceId(resourceGroup().name, 'Microsoft.Network/networkSecurityGroups', networkSecurityGroupName)
 var vnetId = resourceId(resourceGroup().name, 'Microsoft.Network/virtualNetworks', virtualNetworkName)
 var subnetRef = '${vnetId}/subnets/${subnetName}'
 var storageBlobContributor = '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var databricksWorkspaceName_var = '${deploymentName}-${deploymentString}-db'
-//var storageAccountRole_var = '${trifactaStorageAccountName}/Microsoft.Authorization/${guid(uniqueString(trifactaStorageAccountName))}'
 var storageAccountRoleName_var = guid(uniqueString(trifactaStorageAccountName))
-//var publicIpAddressId = resourceId(resourceGroup().name, 'Microsoft.Network/publicIpAddresses', publicIpAddressName)
 
+// Resources
 
+// Network Interface
 resource networkInterface 'Microsoft.Network/networkInterfaces@2021-08-01' = {
   name: networkInterfaceName
   location: location
@@ -63,6 +65,7 @@ resource networkInterface 'Microsoft.Network/networkInterfaces@2021-08-01' = {
   ]
 }
 
+// Network Security Group
 resource networkSecurityGroupName_resource 'Microsoft.Network/networkSecurityGroups@2019-02-01' = {
   name: networkSecurityGroupName
   location: location
@@ -102,6 +105,7 @@ resource networkSecurityGroupName_resource 'Microsoft.Network/networkSecurityGro
   }
 }
 
+// Virtual Network for Trifacta node
 resource virtualNetworkName_resource 'Microsoft.Network/virtualNetworks@2019-04-01' = {
   name: virtualNetworkName
   location: location
@@ -127,6 +131,7 @@ resource virtualNetworkName_resource 'Microsoft.Network/virtualNetworks@2019-04-
   }
 }
 
+//Public IP address
 resource publicIpAddressName_resource 'Microsoft.Network/publicIPAddresses@2021-08-01' = {
   name: publicIpAddressName
   location: location
@@ -141,6 +146,7 @@ resource publicIpAddressName_resource 'Microsoft.Network/publicIPAddresses@2021-
   }
 }
 
+// Virtual Machine
 resource virtualMachine 'Microsoft.Compute/virtualMachines@2021-11-01' = {
   name: virtualMachineName
   location: location
@@ -159,7 +165,7 @@ resource virtualMachine 'Microsoft.Compute/virtualMachines@2021-11-01' = {
         }
       }
       imageReference: {
-        id: '/subscriptions/b5ee4560-1a98-4001-bb35-57413fa77258/resourceGroups/ts_training/providers/Microsoft.Compute/galleries/ts_training/images/trifacta_ee/versions/9.2.1'
+        id: '/subscriptions/b5ee4560-1a98-4001-bb35-57413fa77258/resourceGroups/ts_training/providers/Microsoft.Compute/galleries/ts_training/images/trifacta_ee/versions/9.2.2'
       }
     }
     networkProfile: {
@@ -183,6 +189,7 @@ resource virtualMachine 'Microsoft.Compute/virtualMachines@2021-11-01' = {
     product: 'wrangler-enterprise-vm'
     publisher: 'trifacta'
   }
+  // Run Command for Trifacta configuration
   resource configRunCommand 'runCommands' = {
     name: 'trifactaConfigs'
     location: location
@@ -190,12 +197,13 @@ resource virtualMachine 'Microsoft.Compute/virtualMachines@2021-11-01' = {
       errorBlobUri: '${trifactaStorageAccount.properties.primaryEndpoints.blob}${containerName}/runcommanderror.txt'
       outputBlobUri: '${trifactaStorageAccount.properties.primaryEndpoints.blob}${containerName}/runcommandoutput.txt'
       source: {
-        script: '/opt/trifacta/pkg3p/python/bin/python3 /opt/trifacta/azureconfig.py --keyVaultUrl "${keyVaultName_resource.properties.vaultUri}" --directoryid ${subscription().tenantId} --dbserviceUrl "https://${databricksWorkspaceName.properties.workspaceUrl}" --storageaccount ${trifactaStorageAccountName} --storagecontainer ${containerName} --applicationid ${appId} --secret ${appSecret} && source /opt/trifacta/conf/env.sh && /opt/trifacta/services/configuration-service/bin/import.sh -f /opt/trifacta/tools/config-service-tools/resources/migrate.conf && service nginx restart'
+        script: '/opt/trifacta/pkg3p/python/bin/python3 /opt/trifacta/azureconfig.py --keyVaultUrl "${keyVaultName_resource.properties.vaultUri}" --directoryid ${subscription().tenantId} --dbserviceUrl "https://${databricksWorkspaceName.properties.workspaceUrl}" --storageaccount ${trifactaStorageAccountName} --storagecontainer ${containerName} --applicationid ${appId} --secret ${appSecret} && source /opt/trifacta/conf/env.sh && /opt/trifacta/services/configuration-service/bin/import.sh -f /opt/trifacta/tools/config-service-tools/resources/migrate.conf && /bin/systemctl restart nginx.service'
       }
     }
   }
 }
 
+// Storage Account (ADLSgen2)
 resource trifactaStorageAccount 'Microsoft.Storage/storageAccounts@2021-09-01' = {
   name: trifactaStorageAccountName
   location: location
@@ -220,10 +228,12 @@ resource trifactaStorageAccount 'Microsoft.Storage/storageAccounts@2021-09-01' =
   }
 }
 
+//Storage container
 resource blobServiceContainerName 'Microsoft.Storage/storageAccounts/blobServices/containers@2021-09-01' = {
   name: '${trifactaStorageAccount.name}/default/${containerName}'
 }
 
+// Storage Blob Data Contributor role for trifacta registered app SP
 resource storageAccountRoleName 'Microsoft.Authorization/roleAssignments@2020-10-01-preview' = {
   name: storageAccountRoleName_var
   scope: trifactaStorageAccount
@@ -234,6 +244,7 @@ resource storageAccountRoleName 'Microsoft.Authorization/roleAssignments@2020-10
   }
 }
 
+// Key Vault
 resource keyVaultName_resource 'Microsoft.KeyVault/vaults@2021-10-01' = {
   name: keyVaultName
   location: location
@@ -305,6 +316,7 @@ resource keyVaultName_resource 'Microsoft.KeyVault/vaults@2021-10-01' = {
   }
 }
 
+// Databricks Workspace
 resource databricksWorkspaceName 'Microsoft.Databricks/workspaces@2018-04-01' = {
   name: databricksWorkspaceName_var
   location: location
